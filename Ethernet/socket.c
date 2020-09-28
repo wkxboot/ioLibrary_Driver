@@ -117,12 +117,13 @@ int8_t socket(uint8_t sn, uint8_t protocol, uint16_t port, uint8_t flag)
             uint32_t taddr;
             getSIPR((uint8_t*)&taddr);
             if(taddr == 0) return SOCKERR_SOCKINIT;
+	    break;
          }
       case Sn_MR_UDP :
       case Sn_MR_MACRAW :
+	  case Sn_MR_IPRAW :
          break;
    #if ( _WIZCHIP_ < 5200 )
-      case Sn_MR_IPRAW :
       case Sn_MR_PPPoE :
          break;
    #endif
@@ -203,7 +204,7 @@ int8_t close(uint8_t sn)
    //if( ((getSn_MR(s)& 0x0F) == Sn_MR_TCP) && (getSn_TX_FSR(s) != getSn_TxMAX(s)) ) 
    if( ((getSn_MR(sn)& 0x0F) == Sn_MR_TCP) && (getSn_TX_FSR(sn) != getSn_TxMAX(sn)) ) 
    { 
-      uint8 destip[4] = {0, 0, 0, 1};
+      uint8_t destip[4] = {0, 0, 0, 1};
       // TODO
       // You can wait for completing to sending data;
       // wait about 1 second;
@@ -497,11 +498,11 @@ int32_t sendto(uint8_t sn, uint8_t * buf, uint16_t len, uint8_t * addr, uint16_t
    {
       case Sn_MR_UDP:
       case Sn_MR_MACRAW:
-         break;
-   #if ( _WIZCHIP_ < 5200 )
+//         break;
+//   #if ( _WIZCHIP_ < 5200 )
       case Sn_MR_IPRAW:
          break;
-   #endif
+//   #endif
       default:
          return SOCKERR_SOCKMODE;
    }
@@ -517,14 +518,14 @@ int32_t sendto(uint8_t sn, uint8_t * buf, uint16_t len, uint8_t * addr, uint16_t
    //}
    //
    //if(*((uint32_t*)addr) == 0) return SOCKERR_IPINVALID;
-   if((taddr == 0) && (getSn_MR(sn)&Sn_MR_MACRAW != Sn_MR_MACRAW)) return SOCKERR_IPINVALID;
-   if((port  == 0) && (getSn_MR(sn)&Sn_MR_MACRAW != Sn_MR_MACRAW)) return SOCKERR_PORTZERO;
+   if((taddr == 0) && ((getSn_MR(sn)&Sn_MR_MACRAW) != Sn_MR_MACRAW)) return SOCKERR_IPINVALID;
+   if((port  == 0) && ((getSn_MR(sn)&Sn_MR_MACRAW) != Sn_MR_MACRAW)) return SOCKERR_PORTZERO;
    tmp = getSn_SR(sn);
-#if ( _WIZCHIP_ < 5200 )
-   if(tmp != SOCK_MACRAW && tmp != SOCK_UDP && tmp != SOCK_IPRAW) return SOCKERR_SOCKSTATUS;
-#else
-   if(tmp != SOCK_MACRAW && tmp != SOCK_UDP) return SOCKERR_SOCKSTATUS;
-#endif
+//#if ( _WIZCHIP_ < 5200 )
+   if((tmp != SOCK_MACRAW) && (tmp != SOCK_UDP) && (tmp != SOCK_IPRAW)) return SOCKERR_SOCKSTATUS;
+//#else
+//   if(tmp != SOCK_MACRAW && tmp != SOCK_UDP) return SOCKERR_SOCKSTATUS;
+//#endif
       
    setSn_DIPR(sn,addr);
    setSn_DPORT(sn,port);      
@@ -613,10 +614,10 @@ int32_t recvfrom(uint8_t sn, uint8_t * buf, uint16_t len, uint8_t * addr, uint16
    switch((mr=getSn_MR(sn)) & 0x0F)
    {
       case Sn_MR_UDP:
+	  case Sn_MR_IPRAW:
       case Sn_MR_MACRAW:
          break;
    #if ( _WIZCHIP_ < 5200 )         
-      case Sn_MR_IPRAW:
       case Sn_MR_PPPoE:
          break;
    #endif
@@ -718,7 +719,7 @@ int32_t recvfrom(uint8_t sn, uint8_t * buf, uint16_t len, uint8_t * addr, uint16
 			else pack_len = sock_remained_size[sn];
 			wiz_recv_data(sn,buf,pack_len);
 		   break;
-   #if ( _WIZCHIP_ < 5200 )
+   //#if ( _WIZCHIP_ < 5200 )
 		case Sn_MR_IPRAW:
 		   if(sock_remained_size[sn] == 0)
 		   {
@@ -742,7 +743,7 @@ int32_t recvfrom(uint8_t sn, uint8_t * buf, uint16_t len, uint8_t * addr, uint16
 			else pack_len = sock_remained_size[sn];
    		wiz_recv_data(sn, buf, pack_len); // data copy.
 			break;
-   #endif
+   //#endif
       default:
          wiz_recv_ignore(sn, pack_len); // data copy.
          sock_remained_size[sn] = pack_len;
@@ -858,7 +859,7 @@ int8_t  setsockopt(uint8_t sn, sockopt_type sotype, void* arg)
          		}
             }
          break;
-   #if _WIZCHIP_ > 5200
+   #if !( (_WIZCHIP_ == 5100) || (_WIZCHIP_ == 5200) )
       case SO_KEEPALIVEAUTO:
          CHECK_SOCKMODE(Sn_MR_TCP);
          setSn_KPALVTR(sn,*(uint8_t*)arg);
@@ -886,7 +887,7 @@ int8_t  getsockopt(uint8_t sn, sockopt_type sotype, void* arg)
          *(uint8_t*) arg = getSn_TOS(sn);
          break;
       case SO_MSS:   
-         *(uint8_t*) arg = getSn_MSSR(sn);
+         *(uint16_t*) arg = getSn_MSSR(sn);
          break;
       case SO_DESTIP:
          getSn_DIPR(sn, (uint8_t*)arg);
@@ -910,7 +911,7 @@ int8_t  getsockopt(uint8_t sn, sockopt_type sotype, void* arg)
          *(uint8_t*) arg = getSn_SR(sn);
          break;
       case SO_REMAINSIZE:
-         if(getSn_MR(sn) == Sn_MR_TCP)
+         if(getSn_MR(sn) & Sn_MR_TCP)
             *(uint16_t*)arg = getSn_RX_RSR(sn);
          else
             *(uint16_t*)arg = sock_remained_size[sn];
